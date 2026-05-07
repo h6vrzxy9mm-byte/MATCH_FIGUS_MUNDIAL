@@ -121,162 +121,33 @@ def obtener_matches_nuevos(db, user, matches):
 
 def mostrar_checkboxes_correlativos(figus, guardadas, key_prefix):
     seleccionadas = set()
+
     for inicio in range(0, len(figus), 5):
         fila = figus[inicio:inicio + 5]
         cols = st.columns(len(fila))
+
         for col, figu in zip(cols, fila):
+            # SINCRONIZACIÓN:
+            # Si el valor ya existe en guardadas y el checkbox todavía no existe
+            # en session_state, lo inicializamos correctamente.
+            state_key = f"{key_prefix}_{figu}"
+
+            if state_key not in st.session_state:
+                st.session_state[state_key] = figu in guardadas
+
             with col:
-                if st.checkbox(figu, value=figu in guardadas, key=f"{key_prefix}_{figu}"):
+                marcado = st.checkbox(
+                    figu,
+                    value=st.session_state[state_key],
+                    key=state_key
+                )
+
+                st.session_state[state_key] = marcado
+
+                if marcado:
                     seleccionadas.add(figu)
+
     return seleccionadas
-
-
-def normalizar_texto_ocr(texto):
-    texto = texto.upper()
-    reemplazos = {
-        " ": "", "-": "", "_": "", ".": "", ":": "", "|": "", "\n": "", "\t": "",
-        "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U",
-        "O": "0"
-    }
-    for a, b in reemplazos.items():
-        texto = texto.replace(a, b)
-    return texto
-
-def detectar_figu_desde_texto(texto):
-    limpio = normalizar_texto_ocr(texto)
-
-    # Correcciones típicas de OCR
-    limpio = limpio.replace("FWCO", "FWC0")
-    limpio = limpio.replace("C0C", "COC")
-    limpio = limpio.replace("C0CA", "COCA")
-
-    codigos_paises = list(PAISES.keys())
-    codigos_extras = list(EXTRAS.keys())
-    todos_codigos = codigos_extras + codigos_paises
-
-    # Coca-Cola puede aparecer como COC, COCA o COCACOLA
-    match_coca = re.search(r"(COC|COCA|COCACOLA)([0-9]{1,2})", limpio)
-    if match_coca:
-        numero = int(match_coca.group(2))
-        if 0 <= numero <= 19:
-            return f"COC{numero:02d}"
-
-    for codigo in todos_codigos:
-        match = re.search(rf"{codigo}([0-9]{{1,2}})", limpio)
-        if match:
-            numero = int(match.group(1))
-            if codigo in EXTRAS:
-                if 0 <= numero <= 19:
-                    return f"{codigo}{numero:02d}"
-            else:
-                if 1 <= numero <= 20:
-                    return f"{codigo}{numero}"
-
-    # Segundo intento cambiando letras confundidas con números
-    variantes = limpio.replace("I", "1").replace("L", "1").replace("S", "5").replace("B", "8")
-    for codigo in todos_codigos:
-        match = re.search(rf"{codigo}([0-9]{{1,2}})", variantes)
-        if match:
-            numero = int(match.group(1))
-            if codigo in EXTRAS:
-                if 0 <= numero <= 19:
-                    return f"{codigo}{numero:02d}"
-            else:
-                if 1 <= numero <= 20:
-                    return f"{codigo}{numero}"
-
-    return None
-
-def recortar_superior_derecha(img):
-    # La zona importante está arriba a la derecha de la figurita.
-    w, h = img.size
-    izquierda = int(w * 0.45)
-    arriba = int(h * 0.00)
-    derecha = int(w * 1.00)
-    abajo = int(h * 0.32)
-    return img.crop((izquierda, arriba, derecha, abajo))
-
-def preparar_imagen_ocr(img):
-    if img.mode != "RGB":
-        img = img.convert("RGB")
-
-    zona = recortar_superior_derecha(img)
-
-    # Agrandar la zona ayuda mucho al OCR.
-    zona = zona.resize((zona.width * 4, zona.height * 4))
-
-    # Blanco y negro + contraste fuerte
-    gris = ImageOps.grayscale(zona)
-    gris = ImageEnhance.Contrast(gris).enhance(2.8)
-    gris = ImageEnhance.Sharpness(gris).enhance(2.2)
-    gris = gris.filter(ImageFilter.MedianFilter(size=3))
-
-    # Umbral para limpiar fondo
-    bw = gris.point(lambda x: 0 if x < 150 else 255, "1")
-    return zona, bw
-
-def escanear_figu(img):
-    zona_color, zona_procesada = preparar_imagen_ocr(img)
-
-    textos = []
-    configs = [
-        "--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-        "--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-        "--psm 11 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-    ]
-
-    for imagen in [zona_procesada, zona_color]:
-        for config in configs:
-            try:
-                textos.append(pytesseract.image_to_string(imagen, config=config))
-            except Exception:
-                pass
-
-    texto_total = " ".join(textos)
-    figu = detectar_figu_desde_texto(texto_total)
-    return figu, texto_total, zona_color, zona_procesada
-
-
-
-def mostrar_estado_figu(figu, album, repetidas):
-    en_album = figu in album
-    en_repetidas = figu in repetidas
-
-    if en_album:
-        st.success(f"📒 {figu} SÍ está en tu álbum.")
-    else:
-        st.error(f"📒 {figu} NO está en tu álbum.")
-
-    if en_repetidas:
-        st.success(f"✅ {figu} SÍ está marcada como repetida.")
-    else:
-        st.info(f"✅ {figu} NO está marcada como repetida.")
-
-def guardar_figu_usuario(db, user, figu, destino):
-    if "users" not in db:
-        db["users"] = {}
-
-    if user not in db["users"]:
-        db["users"][user] = {}
-
-    if "album" not in db["users"][user]:
-        db["users"][user]["album"] = []
-
-    if "repetidas" not in db["users"][user]:
-        db["users"][user]["repetidas"] = []
-
-    if figu not in db["users"][user]["album"]:
-        db["users"][user]["album"].append(figu)
-
-    if destino == "repetida" and figu not in db["users"][user]["repetidas"]:
-        db["users"][user]["repetidas"].append(figu)
-
-    db["users"][user]["album"] = sorted(set(db["users"][user]["album"]))
-    db["users"][user]["repetidas"] = sorted(set(db["users"][user]["repetidas"]))
-    db["users"][user]["faltantes"] = calcular_faltantes(db["users"][user]["album"])
-
-    save_db(db)
-    return db
 
 def normalizar_usuario(nombre):
     return nombre.strip().lower()
