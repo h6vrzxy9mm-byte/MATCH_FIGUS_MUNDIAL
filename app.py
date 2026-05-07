@@ -127,22 +127,8 @@ def mostrar_checkboxes_correlativos(figus, guardadas, key_prefix):
         cols = st.columns(len(fila))
 
         for col, figu in zip(cols, fila):
-            # SINCRONIZACIÓN:
-            # Si el valor ya existe en guardadas y el checkbox todavía no existe
-            # en session_state, lo inicializamos correctamente.
-            state_key = f"{key_prefix}_{figu}"
-
-            if state_key not in st.session_state:
-                st.session_state[state_key] = figu in guardadas
-
             with col:
-                marcado = st.checkbox(
-                    figu,
-                    value=st.session_state[state_key],
-                    key=state_key
-                )
-
-                if marcado:
+                if st.checkbox(figu, value=figu in guardadas, key=f"{key_prefix}_{figu}"):
                     seleccionadas.add(figu)
 
     return seleccionadas
@@ -158,6 +144,28 @@ def mostrar_estado_figu(figu, album, repetidas):
         st.success(f"✅ {figu} SÍ está marcada como repetida.")
     else:
         st.info(f"✅ {figu} NO está marcada como repetida.")
+
+
+def guardar_figu_usuario(db, user, figu, destino):
+    db.setdefault("users", {})
+    db["users"].setdefault(user, {})
+    db["users"][user].setdefault("album", [])
+    db["users"][user].setdefault("repetidas", [])
+    db["users"][user].setdefault("faltantes", [])
+
+    # Guardar siempre en álbum
+    if figu not in db["users"][user]["album"]:
+        db["users"][user]["album"].append(figu)
+
+    # Si corresponde, marcar como repetida
+    if destino == "repetida" and figu not in db["users"][user]["repetidas"]:
+        db["users"][user]["repetidas"].append(figu)
+
+    db["users"][user]["album"] = sorted(set(db["users"][user]["album"]))
+    db["users"][user]["repetidas"] = sorted(set(db["users"][user]["repetidas"]))
+    db["users"][user]["faltantes"] = calcular_faltantes(db["users"][user]["album"])
+
+    save_db(db)
 
 def normalizar_usuario(nombre):
     return nombre.strip().lower()
