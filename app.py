@@ -4,8 +4,6 @@ import json
 from pathlib import Path
 import re
 from math import radians, sin, cos, sqrt, atan2
-from PIL import Image, ImageEnhance, ImageFilter, ImageOps
-import pytesseract
 
 try:
     from streamlit_js_eval import get_geolocation
@@ -181,62 +179,6 @@ def save_db(db):
         data["repetidas"] = sorted(set(data.get("repetidas", [])))
         data["faltantes"] = calcular_faltantes(data.get("album", []))
     DB.write_text(json.dumps(db, indent=2, ensure_ascii=False), encoding="utf-8")
-
-def normalizar_texto(texto):
-    texto = texto.upper()
-    reemplazos = {
-        " ": "", "-": "", "_": "", ".": "", ":": "", "|": "", "\n": "", "\t": "",
-        "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U"
-    }
-    for a, b in reemplazos.items():
-        texto = texto.replace(a, b)
-    return texto
-
-def detectar_figu(texto):
-    limpio = normalizar_texto(texto)
-
-    correcciones = {
-        "ESPI4": "ESP14",
-        "ESP1A": "ESP14",
-        "ESPIA": "ESP14",
-        "ESP|4": "ESP14",
-        "ARGI": "ARG1",
-        "BRAI": "BRA1",
-        "MEXI": "MEX1",
-        "USAI": "USA1",
-        "CANI": "CAN1",
-        "KORI": "KOR1",
-        "JPNI": "JPN1",
-    }
-
-    for mal, bien in correcciones.items():
-        if normalizar_texto(mal) in limpio:
-            return bien
-
-    for codigo in PAISES.keys():
-        match = re.search(rf"{codigo}([0-9]{{1,2}})", limpio)
-        if match:
-            numero = int(match.group(1))
-            if 1 <= numero <= 20:
-                return f"{codigo}{numero}"
-
-    variantes = limpio.replace("I", "1").replace("L", "1").replace("O", "0")
-    for codigo in PAISES.keys():
-        match = re.search(rf"{codigo}([0-9]{{1,2}})", variantes)
-        if match:
-            numero = int(match.group(1))
-            if 1 <= numero <= 20:
-                return f"{codigo}{numero}"
-
-    for codigo in PAISES.keys():
-        if codigo in limpio:
-            numeros = re.findall(r"\d{1,2}", limpio)
-            for n in numeros:
-                numero = int(n)
-                if 1 <= numero <= 20:
-                    return f"{codigo}{numero}"
-
-    return None
 
 def preparar_zonas(img, crop_mode="normal"):
     ancho, alto = img.size
@@ -672,91 +614,6 @@ with tab2:
         st.success("Guardado correctamente.")
 
 with tab3:
-    st.subheader("📷 Escanear figuritas")
-    st.info("Si no reconoce, probá cambiar el recorte. Igual siempre podés cargar manualmente abajo.")
-
-    crop_mode = st.selectbox("Recorte para lectura", ["normal", "más arriba", "más amplio"])
-    modo = st.radio("Modo", ["Subir varias fotos", "Usar cámara"])
-
-    imagenes = []
-    if modo == "Subir varias fotos":
-        archivos = st.file_uploader("Subí fotos", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
-        if archivos:
-            for archivo in archivos:
-                imagenes.append((archivo.name, Image.open(archivo)))
-    else:
-        foto = st.camera_input("Sacá foto de una figurita")
-        if foto:
-            imagenes.append(("foto_camara", Image.open(foto)))
-
-    detectadas = []
-
-    if imagenes and st.button("🔎 Detectar todas"):
-        for nombre, img in imagenes:
-            texto, zonas = ocr_imagen(img, crop_mode)
-            figu = detectar_figu(texto)
-
-            st.markdown('<div class="app-card">', unsafe_allow_html=True)
-            st.write(f"Imagen: {nombre}")
-            st.image(img, width=220)
-
-            for idx, zona in enumerate(zonas[:2]):
-                st.image(zona, caption=f"Zona leída {idx+1}", width=220)
-
-            st.code(texto if texto else "No se pudo leer texto")
-
-            if figu:
-                st.success(f"Detectada: {figu}")
-                detectadas.append(figu)
-            else:
-                st.warning("No detectada. Cargala manualmente abajo.")
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        st.session_state.detectadas = sorted(set(detectadas))
-
-    detectadas_guardadas = st.session_state.get("detectadas", [])
-
-    if detectadas_guardadas:
-        st.subheader("Guardar detectadas")
-        st.write(", ".join(detectadas_guardadas))
-        destino = st.radio("Guardar detectadas como", ["Ya la tengo en el álbum", "Repetidas para cambiar"])
-        if st.button("➕ Agregar detectadas"):
-            db = load_db()
-            for figu in detectadas_guardadas:
-                if figu not in db["users"][user]["album"]:
-                    db["users"][user]["album"].append(figu)
-                if destino == "Repetidas para cambiar" and figu not in db["users"][user]["repetidas"]:
-                    db["users"][user]["repetidas"].append(figu)
-            save_db(db)
-            st.success("Figuritas agregadas.")
-
-    st.subheader("Carga manual rápida")
-    opciones_manual = list(PAISES.keys()) + list(EXTRAS.keys())
-    col_a, col_b = st.columns(2)
-    with col_a:
-        pais_manual = st.selectbox("País / especial", opciones_manual)
-    with col_b:
-        if pais_manual in EXTRAS:
-            numero_manual = st.selectbox("Número", EXTRAS[pais_manual]["numeros"])
-        else:
-            numero_manual = st.selectbox("Número", NUMEROS)
-
-    destino_manual = st.radio("Guardar manual como", ["Ya la tengo en el álbum", "Repetida para cambiar"], key="destino_manual")
-
-    if st.button("Agregar manual"):
-        figu = f"{pais_manual}{numero_manual}"
-        db = load_db()
-
-        if figu not in db["users"][user]["album"]:
-            db["users"][user]["album"].append(figu)
-
-        if destino_manual == "Repetida para cambiar" and figu not in db["users"][user]["repetidas"]:
-            db["users"][user]["repetidas"].append(figu)
-
-        save_db(db)
-        st.success(f"{figu} agregada.")
-
-with tab4:
     st.subheader("🤝 Matches")
     matches = calcular_matches(db, user)
     nuevos = obtener_matches_nuevos(db, user, matches)
@@ -807,7 +664,7 @@ with tab4:
                 save_db(db)
                 st.success("Mensaje enviado.")
 
-with tab5:
+with tab4:
     st.subheader("📩 Mensajes")
     mensajes = [m for m in db["messages"] if m["to"] == user]
 
