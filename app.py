@@ -142,8 +142,6 @@ def mostrar_checkboxes_correlativos(figus, guardadas, key_prefix):
                     key=state_key
                 )
 
-                st.session_state[state_key] = marcado
-
                 if marcado:
                     seleccionadas.add(figu)
 
