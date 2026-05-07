@@ -237,6 +237,21 @@ def escanear_figu(img):
     return figu, texto_total, zona_color, zona_procesada
 
 
+
+def mostrar_estado_figu(figu, album, repetidas):
+    en_album = figu in album
+    en_repetidas = figu in repetidas
+
+    if en_album:
+        st.success(f"📒 {figu} SÍ está en tu álbum.")
+    else:
+        st.error(f"📒 {figu} NO está en tu álbum.")
+
+    if en_repetidas:
+        st.success(f"✅ {figu} SÍ está marcada como repetida.")
+    else:
+        st.info(f"✅ {figu} NO está marcada como repetida.")
+
 def guardar_figu_usuario(db, user, figu, destino):
     if figu not in db["users"][user]["album"]:
         db["users"][user]["album"].append(figu)
@@ -775,13 +790,7 @@ with tab3:
         album_actual = set(db_actual["users"][user].get("album", []))
         repetidas_actuales = set(db_actual["users"][user].get("repetidas", []))
 
-        if figu in album_actual:
-            st.info(f"📒 Ya tenés {figu} en tu álbum.")
-        else:
-            st.warning(f"❌ Todavía no tenés {figu} en tu álbum.")
-
-        if figu in repetidas_actuales:
-            st.warning(f"✅ {figu} ya está marcada como repetida.")
+        mostrar_estado_figu(figu, album_actual, repetidas_actuales)
 
         st.markdown("### ¿Qué querés hacer con esta figurita?")
 
@@ -831,13 +840,7 @@ with tab3:
 
     st.write(f"Figurita seleccionada: **{figu_manual}**")
 
-    if figu_manual in album_manual:
-        st.info(f"📒 Ya tenés {figu_manual} en tu álbum.")
-    else:
-        st.warning(f"❌ Todavía no tenés {figu_manual} en tu álbum.")
-
-    if figu_manual in repetidas_manual:
-        st.warning(f"✅ {figu_manual} ya está marcada como repetida.")
+    mostrar_estado_figu(figu_manual, album_manual, repetidas_manual)
 
     st.markdown("### ¿Cómo querés guardarla?")
 
