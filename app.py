@@ -3,6 +3,8 @@ import streamlit as st
 import json
 from pathlib import Path
 import re
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+import pytesseract
 from math import radians, sin, cos, sqrt, atan2
 
 try:
@@ -127,6 +129,112 @@ def mostrar_checkboxes_correlativos(figus, guardadas, key_prefix):
                 if st.checkbox(figu, value=figu in guardadas, key=f"{key_prefix}_{figu}"):
                     seleccionadas.add(figu)
     return seleccionadas
+
+
+def normalizar_texto_ocr(texto):
+    texto = texto.upper()
+    reemplazos = {
+        " ": "", "-": "", "_": "", ".": "", ":": "", "|": "", "\n": "", "\t": "",
+        "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U",
+        "O": "0"
+    }
+    for a, b in reemplazos.items():
+        texto = texto.replace(a, b)
+    return texto
+
+def detectar_figu_desde_texto(texto):
+    limpio = normalizar_texto_ocr(texto)
+
+    # Correcciones típicas de OCR
+    limpio = limpio.replace("FWCO", "FWC0")
+    limpio = limpio.replace("C0C", "COC")
+    limpio = limpio.replace("C0CA", "COCA")
+
+    codigos_paises = list(PAISES.keys())
+    codigos_extras = list(EXTRAS.keys())
+    todos_codigos = codigos_extras + codigos_paises
+
+    # Coca-Cola puede aparecer como COC, COCA o COCACOLA
+    match_coca = re.search(r"(COC|COCA|COCACOLA)([0-9]{1,2})", limpio)
+    if match_coca:
+        numero = int(match_coca.group(2))
+        if 0 <= numero <= 19:
+            return f"COC{numero:02d}"
+
+    for codigo in todos_codigos:
+        match = re.search(rf"{codigo}([0-9]{{1,2}})", limpio)
+        if match:
+            numero = int(match.group(1))
+            if codigo in EXTRAS:
+                if 0 <= numero <= 19:
+                    return f"{codigo}{numero:02d}"
+            else:
+                if 1 <= numero <= 20:
+                    return f"{codigo}{numero}"
+
+    # Segundo intento cambiando letras confundidas con números
+    variantes = limpio.replace("I", "1").replace("L", "1").replace("S", "5").replace("B", "8")
+    for codigo in todos_codigos:
+        match = re.search(rf"{codigo}([0-9]{{1,2}})", variantes)
+        if match:
+            numero = int(match.group(1))
+            if codigo in EXTRAS:
+                if 0 <= numero <= 19:
+                    return f"{codigo}{numero:02d}"
+            else:
+                if 1 <= numero <= 20:
+                    return f"{codigo}{numero}"
+
+    return None
+
+def recortar_superior_derecha(img):
+    # La zona importante está arriba a la derecha de la figurita.
+    w, h = img.size
+    izquierda = int(w * 0.45)
+    arriba = int(h * 0.00)
+    derecha = int(w * 1.00)
+    abajo = int(h * 0.32)
+    return img.crop((izquierda, arriba, derecha, abajo))
+
+def preparar_imagen_ocr(img):
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+
+    zona = recortar_superior_derecha(img)
+
+    # Agrandar la zona ayuda mucho al OCR.
+    zona = zona.resize((zona.width * 4, zona.height * 4))
+
+    # Blanco y negro + contraste fuerte
+    gris = ImageOps.grayscale(zona)
+    gris = ImageEnhance.Contrast(gris).enhance(2.8)
+    gris = ImageEnhance.Sharpness(gris).enhance(2.2)
+    gris = gris.filter(ImageFilter.MedianFilter(size=3))
+
+    # Umbral para limpiar fondo
+    bw = gris.point(lambda x: 0 if x < 150 else 255, "1")
+    return zona, bw
+
+def escanear_figu(img):
+    zona_color, zona_procesada = preparar_imagen_ocr(img)
+
+    textos = []
+    configs = [
+        "--psm 7 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+        "--psm 6 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+        "--psm 11 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+    ]
+
+    for imagen in [zona_procesada, zona_color]:
+        for config in configs:
+            try:
+                textos.append(pytesseract.image_to_string(imagen, config=config))
+            except Exception:
+                pass
+
+    texto_total = " ".join(textos)
+    figu = detectar_figu_desde_texto(texto_total)
+    return figu, texto_total, zona_color, zona_procesada
 
 def normalizar_usuario(nombre):
     return nombre.strip().lower()
@@ -613,7 +721,103 @@ with tab2:
         save_db(db)
         st.success("Guardado correctamente.")
 
+
 with tab3:
+    st.subheader("📷 Escanear figurita")
+    st.info("Sacá o subí una foto clara de UNA figurita. La app va a leer principalmente la parte superior derecha, donde aparece el código y número.")
+
+    modo_scan = st.radio("Elegí cómo cargar la imagen", ["Subir foto", "Usar cámara"], key="modo_scan")
+
+    imagen_scan = None
+    if modo_scan == "Subir foto":
+        archivo_scan = st.file_uploader("Subí la foto de la figurita", type=["jpg", "jpeg", "png"], key="archivo_scan")
+        if archivo_scan:
+            imagen_scan = Image.open(archivo_scan)
+    else:
+        foto_scan = st.camera_input("Sacá foto de la figurita", key="foto_scan")
+        if foto_scan:
+            imagen_scan = Image.open(foto_scan)
+
+    if imagen_scan:
+        st.image(imagen_scan, caption="Foto cargada", width=260)
+
+        if st.button("🔎 Escanear figurita"):
+            figu_detectada, texto_leido, zona_color, zona_procesada = escanear_figu(imagen_scan)
+
+            st.session_state["ultima_zona_color"] = zona_color
+            st.session_state["ultima_zona_procesada"] = zona_procesada
+            st.session_state["ultima_figu_detectada"] = figu_detectada
+            st.session_state["ultimo_texto_ocr"] = texto_leido
+
+    if "ultima_zona_color" in st.session_state:
+        st.markdown("### Zona analizada")
+        st.image(st.session_state["ultima_zona_color"], caption="Parte superior derecha detectada", width=260)
+
+    if st.session_state.get("ultima_figu_detectada"):
+        figu = st.session_state["ultima_figu_detectada"]
+        st.success(f"Creo que la figurita es: {figu}")
+
+        destino_scan = st.radio(
+            "¿Dónde la querés guardar?",
+            ["Ya la tengo en el álbum", "Repetida para cambiar"],
+            key="destino_scan_confirmado"
+        )
+
+        col_si, col_no = st.columns(2)
+
+        with col_si:
+            if st.button("✅ Sí, agregar"):
+                db = load_db()
+
+                if figu not in db["users"][user]["album"]:
+                    db["users"][user]["album"].append(figu)
+
+                if destino_scan == "Repetida para cambiar" and figu not in db["users"][user]["repetidas"]:
+                    db["users"][user]["repetidas"].append(figu)
+
+                save_db(db)
+                st.success(f"{figu} agregada correctamente.")
+
+        with col_no:
+            if st.button("❌ No, corregir manualmente"):
+                st.session_state["corregir_scan"] = True
+
+    elif "ultima_figu_detectada" in st.session_state:
+        st.warning("No pude reconocerla con seguridad. Podés cargarla manualmente abajo.")
+
+    if st.session_state.get("corregir_scan") or ("ultima_figu_detectada" in st.session_state and not st.session_state.get("ultima_figu_detectada")):
+        st.markdown("### Cargar manualmente")
+        opciones_manual_scan = list(PAISES.keys()) + list(EXTRAS.keys())
+        col_a, col_b = st.columns(2)
+        with col_a:
+            codigo_manual_scan = st.selectbox("País / especial", opciones_manual_scan, key="codigo_manual_scan")
+        with col_b:
+            if codigo_manual_scan in EXTRAS:
+                numero_manual_scan = st.selectbox("Número", EXTRAS[codigo_manual_scan]["numeros"], key="numero_manual_scan")
+            else:
+                numero_manual_scan = st.selectbox("Número", NUMEROS, key="numero_manual_scan")
+
+        destino_manual_scan = st.radio(
+            "Guardar como",
+            ["Ya la tengo en el álbum", "Repetida para cambiar"],
+            key="destino_manual_scan"
+        )
+
+        if st.button("💾 Guardar figurita corregida"):
+            figu_manual = f"{codigo_manual_scan}{numero_manual_scan}"
+            db = load_db()
+
+            if figu_manual not in db["users"][user]["album"]:
+                db["users"][user]["album"].append(figu_manual)
+
+            if destino_manual_scan == "Repetida para cambiar" and figu_manual not in db["users"][user]["repetidas"]:
+                db["users"][user]["repetidas"].append(figu_manual)
+
+            save_db(db)
+            st.success(f"{figu_manual} agregada correctamente.")
+
+
+with tab4:
     st.subheader("🤝 Matches")
     matches = calcular_matches(db, user)
     nuevos = obtener_matches_nuevos(db, user, matches)
@@ -664,7 +868,7 @@ with tab3:
                 save_db(db)
                 st.success("Mensaje enviado.")
 
-with tab4:
+with tab5:
     st.subheader("📩 Mensajes")
     mensajes = [m for m in db["messages"] if m["to"] == user]
 
