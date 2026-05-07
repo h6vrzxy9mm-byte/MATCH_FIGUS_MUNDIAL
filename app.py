@@ -236,6 +236,16 @@ def escanear_figu(img):
     figu = detectar_figu_desde_texto(texto_total)
     return figu, texto_total, zona_color, zona_procesada
 
+
+def guardar_figu_usuario(db, user, figu, destino):
+    if figu not in db["users"][user]["album"]:
+        db["users"][user]["album"].append(figu)
+
+    if destino == "repetida" and figu not in db["users"][user]["repetidas"]:
+        db["users"][user]["repetidas"].append(figu)
+
+    save_db(db)
+
 def normalizar_usuario(nombre):
     return nombre.strip().lower()
 
@@ -722,9 +732,13 @@ with tab2:
         st.success("Guardado correctamente.")
 
 
+
 with tab3:
-    st.subheader("📷 Escanear figurita")
-    st.info("Sacá o subí una foto clara de UNA figurita. La app va a leer principalmente la parte superior derecha, donde aparece el código y número.")
+    st.subheader("📷 Escanear / cargar figurita")
+    st.info("Podés escanear una figurita o cargarla manualmente. En ambos casos vas a poder guardarla en el álbum o marcarla como repetida.")
+
+    st.markdown("## 🔎 Escanear figurita")
+    st.caption("Para escanear, sacá o subí una foto clara de UNA figurita. La app intenta leer la parte superior derecha, donde aparece el código y número.")
 
     modo_scan = st.radio("Elegí cómo cargar la imagen", ["Subir foto", "Usar cámara"], key="modo_scan")
 
@@ -763,101 +777,83 @@ with tab3:
 
         if figu in album_actual:
             st.info(f"📒 Ya tenés {figu} en tu álbum.")
-
-            if figu in repetidas_actuales:
-                st.warning(f"✅ {figu} ya está marcada como repetida.")
-            else:
-                st.write("¿Querés marcarla como repetida para cambiar?")
-
-                col_si, col_no = st.columns(2)
-
-                with col_si:
-                    if st.button("✅ Sí, poner en repetidas"):
-                        db = load_db()
-
-                        if figu not in db["users"][user]["album"]:
-                            db["users"][user]["album"].append(figu)
-
-                        if figu not in db["users"][user]["repetidas"]:
-                            db["users"][user]["repetidas"].append(figu)
-
-                        save_db(db)
-                        st.success(f"{figu} fue agregada a repetidas.")
-
-                with col_no:
-                    if st.button("❌ No, no agregar"):
-                        st.info("No se hizo ningún cambio.")
-
         else:
             st.warning(f"❌ Todavía no tenés {figu} en tu álbum.")
-            st.write("¿Querés agregarla al álbum o guardarla como repetida?")
 
-            col_album, col_rep, col_corr = st.columns(3)
+        if figu in repetidas_actuales:
+            st.warning(f"✅ {figu} ya está marcada como repetida.")
 
-            with col_album:
-                if st.button("📒 Poner en álbum"):
-                    db = load_db()
+        st.markdown("### ¿Qué querés hacer con esta figurita?")
 
-                    if figu not in db["users"][user]["album"]:
-                        db["users"][user]["album"].append(figu)
+        col_album, col_rep, col_corr = st.columns(3)
 
-                    save_db(db)
-                    st.success(f"{figu} fue agregada a tu álbum.")
+        with col_album:
+            if st.button("📒 Guardar en álbum", key=f"scan_album_{figu}"):
+                db = load_db()
+                guardar_figu_usuario(db, user, figu, "album")
+                st.success(f"{figu} fue guardada en tu álbum.")
 
-            with col_rep:
-                if st.button("✅ Poner en repetidas"):
-                    db = load_db()
+        with col_rep:
+            if st.button("✅ Guardar como repetida", key=f"scan_rep_{figu}"):
+                db = load_db()
+                guardar_figu_usuario(db, user, figu, "repetida")
+                st.success(f"{figu} fue guardada en tu álbum y marcada como repetida.")
 
-                    # Una repetida también cuenta como figurita que tenés.
-                    if figu not in db["users"][user]["album"]:
-                        db["users"][user]["album"].append(figu)
-
-                    if figu not in db["users"][user]["repetidas"]:
-                        db["users"][user]["repetidas"].append(figu)
-
-                    save_db(db)
-                    st.success(f"{figu} fue agregada al álbum y marcada como repetida.")
-
-            with col_corr:
-                if st.button("✍️ Corregir"):
-                    st.session_state["corregir_scan"] = True
-
-        if st.button("❌ No es esta figurita / corregir manualmente"):
-            st.session_state["corregir_scan"] = True
+        with col_corr:
+            if st.button("✍️ No es esta / corregir", key=f"scan_corr_{figu}"):
+                st.session_state["corregir_scan"] = True
 
     elif "ultima_figu_detectada" in st.session_state:
         st.warning("No pude reconocerla con seguridad. Podés cargarla manualmente abajo.")
 
-    if st.session_state.get("corregir_scan") or ("ultima_figu_detectada" in st.session_state and not st.session_state.get("ultima_figu_detectada")):
-        st.markdown("### Cargar manualmente")
-        opciones_manual_scan = list(PAISES.keys()) + list(EXTRAS.keys())
-        col_a, col_b = st.columns(2)
-        with col_a:
-            codigo_manual_scan = st.selectbox("País / especial", opciones_manual_scan, key="codigo_manual_scan")
-        with col_b:
-            if codigo_manual_scan in EXTRAS:
-                numero_manual_scan = st.selectbox("Número", EXTRAS[codigo_manual_scan]["numeros"], key="numero_manual_scan")
-            else:
-                numero_manual_scan = st.selectbox("Número", NUMEROS, key="numero_manual_scan")
+    st.divider()
 
-        destino_manual_scan = st.radio(
-            "Guardar como",
-            ["Ya la tengo en el álbum", "Repetida para cambiar"],
-            key="destino_manual_scan"
-        )
+    st.markdown("## ✍️ Cargar figurita manualmente")
+    st.caption("Esta opción aparece siempre por si el escáner no reconoce bien la figurita o preferís cargarla a mano.")
 
-        if st.button("💾 Guardar figurita corregida"):
-            figu_manual = f"{codigo_manual_scan}{numero_manual_scan}"
+    opciones_manual_scan = list(PAISES.keys()) + list(EXTRAS.keys())
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        codigo_manual_scan = st.selectbox("País / especial", opciones_manual_scan, key="codigo_manual_scan")
+
+    with col_b:
+        if codigo_manual_scan in EXTRAS:
+            numero_manual_scan = st.selectbox("Número", EXTRAS[codigo_manual_scan]["numeros"], key="numero_manual_scan")
+        else:
+            numero_manual_scan = st.selectbox("Número", NUMEROS, key="numero_manual_scan")
+
+    figu_manual = f"{codigo_manual_scan}{numero_manual_scan}"
+
+    db_manual = load_db()
+    album_manual = set(db_manual["users"][user].get("album", []))
+    repetidas_manual = set(db_manual["users"][user].get("repetidas", []))
+
+    st.write(f"Figurita seleccionada: **{figu_manual}**")
+
+    if figu_manual in album_manual:
+        st.info(f"📒 Ya tenés {figu_manual} en tu álbum.")
+    else:
+        st.warning(f"❌ Todavía no tenés {figu_manual} en tu álbum.")
+
+    if figu_manual in repetidas_manual:
+        st.warning(f"✅ {figu_manual} ya está marcada como repetida.")
+
+    st.markdown("### ¿Cómo querés guardarla?")
+
+    col_manual_album, col_manual_rep = st.columns(2)
+
+    with col_manual_album:
+        if st.button("📒 Guardar en álbum", key="manual_guardar_album"):
             db = load_db()
+            guardar_figu_usuario(db, user, figu_manual, "album")
+            st.success(f"{figu_manual} fue guardada en tu álbum.")
 
-            if figu_manual not in db["users"][user]["album"]:
-                db["users"][user]["album"].append(figu_manual)
-
-            if destino_manual_scan == "Repetida para cambiar" and figu_manual not in db["users"][user]["repetidas"]:
-                db["users"][user]["repetidas"].append(figu_manual)
-
-            save_db(db)
-            st.success(f"{figu_manual} agregada correctamente.")
+    with col_manual_rep:
+        if st.button("✅ Guardar como repetida", key="manual_guardar_rep"):
+            db = load_db()
+            guardar_figu_usuario(db, user, figu_manual, "repetida")
+            st.success(f"{figu_manual} fue guardada en tu álbum y marcada como repetida.")
 
 
 with tab4:
