@@ -147,6 +147,18 @@ def mostrar_checkboxes_correlativos(figus, guardadas, key_prefix):
 
     return seleccionadas
 
+
+def mostrar_estado_figu(figu, album, repetidas):
+    if figu in album:
+        st.success(f"📒 {figu} SÍ está en tu álbum.")
+    else:
+        st.error(f"📒 {figu} NO está en tu álbum.")
+
+    if figu in repetidas:
+        st.success(f"✅ {figu} SÍ está marcada como repetida.")
+    else:
+        st.info(f"✅ {figu} NO está marcada como repetida.")
+
 def normalizar_usuario(nombre):
     return nombre.strip().lower()
 
