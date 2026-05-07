@@ -121,6 +121,7 @@ def obtener_matches_nuevos(db, user, matches):
 
 def mostrar_checkboxes_correlativos(figus, guardadas, key_prefix):
     seleccionadas = set()
+    version = st.session_state.get("album_widget_version", 0)
 
     for inicio in range(0, len(figus), 5):
         fila = figus[inicio:inicio + 5]
@@ -128,7 +129,8 @@ def mostrar_checkboxes_correlativos(figus, guardadas, key_prefix):
 
         for col, figu in zip(cols, fila):
             with col:
-                if st.checkbox(figu, value=figu in guardadas, key=f"{key_prefix}_{figu}"):
+                key = f"{key_prefix}_{figu}_v{version}"
+                if st.checkbox(figu, value=(figu in guardadas), key=key):
                     seleccionadas.add(figu)
 
     return seleccionadas
@@ -153,11 +155,9 @@ def guardar_figu_usuario(db, user, figu, destino):
     db["users"][user].setdefault("repetidas", [])
     db["users"][user].setdefault("faltantes", [])
 
-    # Guardar siempre en álbum
     if figu not in db["users"][user]["album"]:
         db["users"][user]["album"].append(figu)
 
-    # Si corresponde, marcar como repetida
     if destino == "repetida" and figu not in db["users"][user]["repetidas"]:
         db["users"][user]["repetidas"].append(figu)
 
@@ -166,6 +166,8 @@ def guardar_figu_usuario(db, user, figu, destino):
     db["users"][user]["faltantes"] = calcular_faltantes(db["users"][user]["album"])
 
     save_db(db)
+
+    st.session_state["album_widget_version"] = st.session_state.get("album_widget_version", 0) + 1
 
 def normalizar_usuario(nombre):
     return nombre.strip().lower()
