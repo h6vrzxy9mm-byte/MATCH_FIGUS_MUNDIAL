@@ -118,6 +118,18 @@ def obtener_matches_nuevos(db, user, matches):
 
     return nuevos
 
+
+def mostrar_checkboxes_correlativos(figus, guardadas, key_prefix):
+    seleccionadas = set()
+    for inicio in range(0, len(figus), 5):
+        fila = figus[inicio:inicio + 5]
+        cols = st.columns(len(fila))
+        for col, figu in zip(cols, fila):
+            with col:
+                if st.checkbox(figu, value=figu in guardadas, key=f"{key_prefix}_{figu}"):
+                    seleccionadas.add(figu)
+    return seleccionadas
+
 def normalizar_usuario(nombre):
     return nombre.strip().lower()
 
@@ -363,31 +375,6 @@ def mobile_css():
     .stApp { background: linear-gradient(180deg, #f6f7fb 0%, #ffffff 100%); }
     section[data-testid="stSidebar"] { display: none; }
     .block-container { max-width: 560px; padding-top: 1rem; padding-left: .8rem; padding-right: .8rem; }
-
-    /* OCULTAR BRANDING STREAMLIT */
-    #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
-
-    [data-testid="stToolbar"] {
-        display: none !important;
-    }
-
-    [data-testid="stDecoration"] {
-        display: none !important;
-    }
-
-    [data-testid="stStatusWidget"] {
-        display: none !important;
-    }
-
-    .stDeployButton {
-        display: none !important;
-    }
-
-    iframe {
-        display: none !important;
-    }
     .hero {
         background: linear-gradient(135deg, #1d5cff, #00b894);
         color: white; border-radius: 26px; padding: 22px; margin-bottom: 16px;
@@ -643,45 +630,29 @@ with tab2:
 
     for codigo, nombre_pais in PAISES.items():
         with st.expander(f"{nombre_pais} — {codigo}"):
-            cols_album = st.columns(5)
-            for i, num in enumerate(NUMEROS):
-                figu = f"{codigo}{num}"
-                with cols_album[i % 5]:
-                    if st.checkbox(figu, value=figu in album_guardado, key=f"album_{figu}"):
-                        nuevo_album.add(figu)
+            figus = [f"{codigo}{num}" for num in NUMEROS]
+            nuevo_album.update(mostrar_checkboxes_correlativos(figus, album_guardado, "album"))
 
     st.subheader("⭐ Especiales que tengo")
 
     for codigo, data in EXTRAS.items():
         with st.expander(f"{data['nombre']} — {codigo}"):
-            cols_album = st.columns(5)
-            for i, num in enumerate(data["numeros"]):
-                figu = f"{codigo}{num}"
-                with cols_album[i % 5]:
-                    if st.checkbox(figu, value=figu in album_guardado, key=f"album_{figu}"):
-                        nuevo_album.add(figu)
+            figus = [f"{codigo}{num}" for num in data["numeros"]]
+            nuevo_album.update(mostrar_checkboxes_correlativos(figus, album_guardado, "album"))
 
     st.subheader("✅ Figuritas repetidas")
 
     for codigo, nombre_pais in PAISES.items():
         with st.expander(f"{nombre_pais} — {codigo}"):
-            cols_rep = st.columns(5)
-            for i, num in enumerate(NUMEROS):
-                figu = f"{codigo}{num}"
-                with cols_rep[i % 5]:
-                    if st.checkbox(figu, value=figu in repetidas_guardadas, key=f"rep_{figu}"):
-                        nuevas_repetidas.add(figu)
+            figus = [f"{codigo}{num}" for num in NUMEROS]
+            nuevas_repetidas.update(mostrar_checkboxes_correlativos(figus, repetidas_guardadas, "rep"))
 
     st.subheader("🥤⭐ Especiales repetidas")
 
     for codigo, data in EXTRAS.items():
         with st.expander(f"{data['nombre']} — {codigo}"):
-            cols_rep = st.columns(5)
-            for i, num in enumerate(data["numeros"]):
-                figu = f"{codigo}{num}"
-                with cols_rep[i % 5]:
-                    if st.checkbox(figu, value=figu in repetidas_guardadas, key=f"rep_{figu}"):
-                        nuevas_repetidas.add(figu)
+            figus = [f"{codigo}{num}" for num in data["numeros"]]
+            nuevas_repetidas.update(mostrar_checkboxes_correlativos(figus, repetidas_guardadas, "rep"))
 
     album_final = set(nuevo_album).union(nuevas_repetidas)
     faltantes = calcular_faltantes(album_final)
