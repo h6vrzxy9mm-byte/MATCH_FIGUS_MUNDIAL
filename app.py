@@ -757,30 +757,73 @@ with tab3:
         figu = st.session_state["ultima_figu_detectada"]
         st.success(f"Creo que la figurita es: {figu}")
 
-        destino_scan = st.radio(
-            "¿Dónde la querés guardar?",
-            ["Ya la tengo en el álbum", "Repetida para cambiar"],
-            key="destino_scan_confirmado"
-        )
+        db_actual = load_db()
+        album_actual = set(db_actual["users"][user].get("album", []))
+        repetidas_actuales = set(db_actual["users"][user].get("repetidas", []))
 
-        col_si, col_no = st.columns(2)
+        if figu in album_actual:
+            st.info(f"📒 Ya tenés {figu} en tu álbum.")
 
-        with col_si:
-            if st.button("✅ Sí, agregar"):
-                db = load_db()
+            if figu in repetidas_actuales:
+                st.warning(f"✅ {figu} ya está marcada como repetida.")
+            else:
+                st.write("¿Querés marcarla como repetida para cambiar?")
 
-                if figu not in db["users"][user]["album"]:
-                    db["users"][user]["album"].append(figu)
+                col_si, col_no = st.columns(2)
 
-                if destino_scan == "Repetida para cambiar" and figu not in db["users"][user]["repetidas"]:
-                    db["users"][user]["repetidas"].append(figu)
+                with col_si:
+                    if st.button("✅ Sí, poner en repetidas"):
+                        db = load_db()
 
-                save_db(db)
-                st.success(f"{figu} agregada correctamente.")
+                        if figu not in db["users"][user]["album"]:
+                            db["users"][user]["album"].append(figu)
 
-        with col_no:
-            if st.button("❌ No, corregir manualmente"):
-                st.session_state["corregir_scan"] = True
+                        if figu not in db["users"][user]["repetidas"]:
+                            db["users"][user]["repetidas"].append(figu)
+
+                        save_db(db)
+                        st.success(f"{figu} fue agregada a repetidas.")
+
+                with col_no:
+                    if st.button("❌ No, no agregar"):
+                        st.info("No se hizo ningún cambio.")
+
+        else:
+            st.warning(f"❌ Todavía no tenés {figu} en tu álbum.")
+            st.write("¿Querés agregarla al álbum o guardarla como repetida?")
+
+            col_album, col_rep, col_corr = st.columns(3)
+
+            with col_album:
+                if st.button("📒 Poner en álbum"):
+                    db = load_db()
+
+                    if figu not in db["users"][user]["album"]:
+                        db["users"][user]["album"].append(figu)
+
+                    save_db(db)
+                    st.success(f"{figu} fue agregada a tu álbum.")
+
+            with col_rep:
+                if st.button("✅ Poner en repetidas"):
+                    db = load_db()
+
+                    # Una repetida también cuenta como figurita que tenés.
+                    if figu not in db["users"][user]["album"]:
+                        db["users"][user]["album"].append(figu)
+
+                    if figu not in db["users"][user]["repetidas"]:
+                        db["users"][user]["repetidas"].append(figu)
+
+                    save_db(db)
+                    st.success(f"{figu} fue agregada al álbum y marcada como repetida.")
+
+            with col_corr:
+                if st.button("✍️ Corregir"):
+                    st.session_state["corregir_scan"] = True
+
+        if st.button("❌ No es esta figurita / corregir manualmente"):
+            st.session_state["corregir_scan"] = True
 
     elif "ultima_figu_detectada" in st.session_state:
         st.warning("No pude reconocerla con seguridad. Podés cargarla manualmente abajo.")
