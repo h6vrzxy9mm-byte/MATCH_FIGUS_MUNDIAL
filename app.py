@@ -253,13 +253,30 @@ def mostrar_estado_figu(figu, album, repetidas):
         st.info(f"✅ {figu} NO está marcada como repetida.")
 
 def guardar_figu_usuario(db, user, figu, destino):
+    if "users" not in db:
+        db["users"] = {}
+
+    if user not in db["users"]:
+        db["users"][user] = {}
+
+    if "album" not in db["users"][user]:
+        db["users"][user]["album"] = []
+
+    if "repetidas" not in db["users"][user]:
+        db["users"][user]["repetidas"] = []
+
     if figu not in db["users"][user]["album"]:
         db["users"][user]["album"].append(figu)
 
     if destino == "repetida" and figu not in db["users"][user]["repetidas"]:
         db["users"][user]["repetidas"].append(figu)
 
+    db["users"][user]["album"] = sorted(set(db["users"][user]["album"]))
+    db["users"][user]["repetidas"] = sorted(set(db["users"][user]["repetidas"]))
+    db["users"][user]["faltantes"] = calcular_faltantes(db["users"][user]["album"])
+
     save_db(db)
+    return db
 
 def normalizar_usuario(nombre):
     return nombre.strip().lower()
@@ -732,6 +749,20 @@ with tab2:
     album_final = set(nuevo_album).union(nuevas_repetidas)
     faltantes = calcular_faltantes(album_final)
 
+    # AUTOGUARDADO:
+    # Cada vez que se tilda o destilda una figurita, Streamlit vuelve a ejecutar la app.
+    # Por eso comparamos lo que está marcado ahora con lo que había guardado y,
+    # si cambió, se guarda automáticamente.
+    album_anterior = set(usuario.get("album", []))
+    repetidas_anteriores = set(usuario.get("repetidas", []))
+
+    if album_final != album_anterior or nuevas_repetidas != repetidas_anteriores:
+        db["users"][user]["album"] = sorted(album_final)
+        db["users"][user]["repetidas"] = sorted(nuevas_repetidas)
+        db["users"][user]["faltantes"] = calcular_faltantes(album_final)
+        save_db(db)
+        st.success("✅ Cambios guardados automáticamente.")
+
     st.write(f"📒 Tenés: {len(album_final)} de {len(todas_las_figus())}")
     st.write(f"❌ Faltan: {len(faltantes)}")
     st.write(f"✅ Repetidas: {len(nuevas_repetidas)}")
@@ -739,12 +770,7 @@ with tab2:
     with st.expander("Ver faltantes"):
         st.write(", ".join(faltantes) if faltantes else "¡Álbum completo!")
 
-    if st.button("💾 Guardar álbum"):
-        db["users"][user]["album"] = sorted(album_final)
-        db["users"][user]["repetidas"] = sorted(nuevas_repetidas)
-        db["users"][user]["faltantes"] = calcular_faltantes(album_final)
-        save_db(db)
-        st.success("Guardado correctamente.")
+    st.caption("💾 Autoguardado activado: no hace falta tocar ningún botón para guardar.")
 
 
 
@@ -801,12 +827,14 @@ with tab3:
                 db = load_db()
                 guardar_figu_usuario(db, user, figu, "album")
                 st.success(f"{figu} fue guardada en tu álbum.")
+                st.rerun()
 
         with col_rep:
             if st.button("✅ Guardar como repetida", key=f"scan_rep_{figu}"):
                 db = load_db()
                 guardar_figu_usuario(db, user, figu, "repetida")
                 st.success(f"{figu} fue guardada en tu álbum y marcada como repetida.")
+                st.rerun()
 
         with col_corr:
             if st.button("✍️ No es esta / corregir", key=f"scan_corr_{figu}"):
@@ -851,12 +879,14 @@ with tab3:
             db = load_db()
             guardar_figu_usuario(db, user, figu_manual, "album")
             st.success(f"{figu_manual} fue guardada en tu álbum.")
+            st.rerun()
 
     with col_manual_rep:
         if st.button("✅ Guardar como repetida", key="manual_guardar_rep"):
             db = load_db()
             guardar_figu_usuario(db, user, figu_manual, "repetida")
             st.success(f"{figu_manual} fue guardada en tu álbum y marcada como repetida.")
+            st.rerun()
 
 
 with tab4:
