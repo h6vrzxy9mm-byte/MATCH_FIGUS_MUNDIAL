@@ -3,6 +3,11 @@ import streamlit as st
 import json
 import io
 import csv
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.platypus.tables import Table, TableStyle
 from pathlib import Path
 import re
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
@@ -139,56 +144,87 @@ def mostrar_checkboxes_correlativos(figus, guardadas, key_prefix):
 
 
 
-def generar_csv_album_usuario(nombre_usuario, album, repetidas, faltantes):
-    salida = io.StringIO()
-    writer = csv.writer(salida)
+
+def generar_pdf_album_usuario(nombre_usuario, album, repetidas, faltantes):
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus.tables import Table, TableStyle
+    from reportlab.lib import colors
+    import tempfile
+
+    temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    doc = SimpleDocTemplate(temp_pdf.name, pagesize=letter)
+    styles = getSampleStyleSheet()
+    elementos = []
+
+    titulo = Paragraph(f"<b>ÁLBUM DE FIGURITAS - {nombre_usuario}</b>", styles['Title'])
+    elementos.append(titulo)
+    elementos.append(Spacer(1, 12))
 
     album = set(album)
     repetidas = set(repetidas)
     faltantes = set(faltantes)
 
-    writer.writerow(["ÁLBUM DE FIGURITAS - MUNDIAL 2026"])
-    writer.writerow(["Usuario", nombre_usuario])
-    writer.writerow([])
-
-    writer.writerow(["RESUMEN POR PAÍS / ESPECIAL"])
-    writer.writerow(["País / especial", "En álbum", "Repetidas", "Faltantes"])
-
-    # Países normales
     for codigo, nombre_pais in PAISES.items():
         figus = [f"{codigo}{num}" for num in NUMEROS]
-        cant_album = len([f for f in figus if f in album])
-        cant_repetidas = len([f for f in figus if f in repetidas])
-        cant_faltantes = len([f for f in figus if f in faltantes])
 
-        # Título pedido: país - cantidad, en el mismo renglón.
-        titulo = f"{nombre_pais} - {cant_album} en álbum - {cant_repetidas} repetidas - {cant_faltantes} faltantes"
-        writer.writerow([titulo, cant_album, cant_repetidas, cant_faltantes])
+        album_figus = sorted([f for f in figus if f in album])
+        faltantes_figus = sorted([f for f in figus if f in faltantes])
+        repetidas_figus = sorted([f for f in figus if f in repetidas])
 
-    # Especiales
-    for codigo, data in EXTRAS.items():
-        figus = [f"{codigo}{num}" for num in data["numeros"]]
-        cant_album = len([f for f in figus if f in album])
-        cant_repetidas = len([f for f in figus if f in repetidas])
-        cant_faltantes = len([f for f in figus if f in faltantes])
+        elementos.append(Paragraph(f"<b>{nombre_pais} ({codigo})</b>", styles['Heading2']))
 
-        titulo = f"{data['nombre']} - {cant_album} en álbum - {cant_repetidas} repetidas - {cant_faltantes} faltantes"
-        writer.writerow([titulo, cant_album, cant_repetidas, cant_faltantes])
+        data = [
+            ["Tipo", "Figuritas"],
+            ["📒 En álbum", " - ".join(album_figus) if album_figus else "Ninguna"],
+            ["❌ Faltantes", " - ".join(faltantes_figus) if faltantes_figus else "Ninguna"],
+            ["✅ Repetidas", " - ".join(repetidas_figus) if repetidas_figus else "Ninguna"],
+        ]
 
-    writer.writerow([])
-    writer.writerow(["DETALLE DE FIGURITAS"])
-    writer.writerow(["Tipo", "Figurita"])
+        tabla = Table(data, colWidths=[120, 380])
+        tabla.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
 
-    for figu in sorted(album):
-        writer.writerow(["En álbum", figu])
+        elementos.append(tabla)
+        elementos.append(Spacer(1, 12))
 
-    for figu in sorted(repetidas):
-        writer.writerow(["Repetida", figu])
+    for codigo, data_extra in EXTRAS.items():
+        figus = [f"{codigo}{num}" for num in data_extra["numeros"]]
 
-    for figu in sorted(faltantes):
-        writer.writerow(["Faltante", figu])
+        album_figus = sorted([f for f in figus if f in album])
+        faltantes_figus = sorted([f for f in figus if f in faltantes])
+        repetidas_figus = sorted([f for f in figus if f in repetidas])
 
-    return salida.getvalue().encode("utf-8-sig")
+        elementos.append(Paragraph(f"<b>{data_extra['nombre']} ({codigo})</b>", styles['Heading2']))
+
+        data = [
+            ["Tipo", "Figuritas"],
+            ["📒 En álbum", " - ".join(album_figus) if album_figus else "Ninguna"],
+            ["❌ Faltantes", " - ".join(faltantes_figus) if faltantes_figus else "Ninguna"],
+            ["✅ Repetidas", " - ".join(repetidas_figus) if repetidas_figus else "Ninguna"],
+        ]
+
+        tabla = Table(data, colWidths=[120, 380])
+        tabla.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ]))
+
+        elementos.append(tabla)
+        elementos.append(Spacer(1, 12))
+
+    doc.build(elementos)
+
+    with open(temp_pdf.name, "rb") as f:
+        return f.read()
+
 
 
 def mostrar_estado_figu(figu, album, repetidas):
@@ -721,7 +757,7 @@ with tab2:
     st.divider()
     st.subheader("📥 Descargar mi álbum")
 
-    archivo_csv = generar_csv_album_usuario(
+    archivo_pdf = generar_pdf_album_usuario(
         usuario.get("display_name", user),
         album_final,
         nuevas_repetidas,
@@ -729,10 +765,10 @@ with tab2:
     )
 
     st.download_button(
-        label="📥 Descargar archivo de mi álbum",
-        data=archivo_csv,
-        file_name=f"album_{user}.csv",
-        mime="text/csv"
+        label="📥 Descargar PDF de mi álbum",
+        data=archivo_pdf,
+        file_name=f"album_{user}.pdf",
+        mime="application/pdf"
     )
 
 
