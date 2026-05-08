@@ -147,84 +147,101 @@ def mostrar_checkboxes_correlativos(figus, guardadas, key_prefix):
 
 def generar_pdf_album_usuario(nombre_usuario, album, repetidas, faltantes):
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.pagesizes import A4
     from reportlab.platypus.tables import Table, TableStyle
     from reportlab.lib import colors
     import tempfile
 
     temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-    doc = SimpleDocTemplate(temp_pdf.name, pagesize=letter)
+
+    doc = SimpleDocTemplate(
+        temp_pdf.name,
+        pagesize=A4,
+        leftMargin=25,
+        rightMargin=25,
+        topMargin=25,
+        bottomMargin=25
+    )
+
     styles = getSampleStyleSheet()
+
+    estilo_texto = ParagraphStyle(
+        "texto",
+        parent=styles["Normal"],
+        fontSize=8,
+        leading=11
+    )
+
     elementos = []
 
-    titulo = Paragraph(f"<b>ÁLBUM DE FIGURITAS - {nombre_usuario}</b>", styles['Title'])
-    elementos.append(titulo)
-    elementos.append(Spacer(1, 12))
+    elementos.append(
+        Paragraph(
+            f"<b>ÁLBUM DE FIGURITAS - {nombre_usuario}</b>",
+            styles["Title"]
+        )
+    )
+
+    elementos.append(Spacer(1, 10))
 
     album = set(album)
     repetidas = set(repetidas)
     faltantes = set(faltantes)
 
-    for codigo, nombre_pais in PAISES.items():
-        figus = [f"{codigo}{num}" for num in NUMEROS]
-
+    def agregar_pais(nombre, codigo, figus):
         album_figus = sorted([f for f in figus if f in album])
         faltantes_figus = sorted([f for f in figus if f in faltantes])
         repetidas_figus = sorted([f for f in figus if f in repetidas])
 
-        elementos.append(Paragraph(f"<b>{nombre_pais} ({codigo})</b>", styles['Heading2']))
+        elementos.append(
+            Paragraph(f"<b>{nombre} ({codigo})</b>", styles["Heading2"])
+        )
 
         data = [
-            ["Tipo", "Figuritas"],
-            ["📒 En álbum", " - ".join(album_figus) if album_figus else "Ninguna"],
-            ["❌ Faltantes", " - ".join(faltantes_figus) if faltantes_figus else "Ninguna"],
-            ["✅ Repetidas", " - ".join(repetidas_figus) if repetidas_figus else "Ninguna"],
+            [
+                Paragraph("<b>Tipo</b>", estilo_texto),
+                Paragraph("<b>Figuritas</b>", estilo_texto),
+            ],
+            [
+                Paragraph("📒 En álbum", estilo_texto),
+                Paragraph(" - ".join(album_figus) if album_figus else "Ninguna", estilo_texto),
+            ],
+            [
+                Paragraph("❌ Faltantes", estilo_texto),
+                Paragraph(" - ".join(faltantes_figus) if faltantes_figus else "Ninguna", estilo_texto),
+            ],
+            [
+                Paragraph("✅ Repetidas", estilo_texto),
+                Paragraph(" - ".join(repetidas_figus) if repetidas_figus else "Ninguna", estilo_texto),
+            ],
         ]
 
-        tabla = Table(data, colWidths=[120, 380])
+        tabla = Table(data, colWidths=[95, 430])
+
         tabla.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
         ]))
 
         elementos.append(tabla)
-        elementos.append(Spacer(1, 12))
+        elementos.append(Spacer(1, 10))
+
+    for codigo, nombre_pais in PAISES.items():
+        figus = [f"{codigo}{num}" for num in NUMEROS]
+        agregar_pais(nombre_pais, codigo, figus)
 
     for codigo, data_extra in EXTRAS.items():
         figus = [f"{codigo}{num}" for num in data_extra["numeros"]]
-
-        album_figus = sorted([f for f in figus if f in album])
-        faltantes_figus = sorted([f for f in figus if f in faltantes])
-        repetidas_figus = sorted([f for f in figus if f in repetidas])
-
-        elementos.append(Paragraph(f"<b>{data_extra['nombre']} ({codigo})</b>", styles['Heading2']))
-
-        data = [
-            ["Tipo", "Figuritas"],
-            ["📒 En álbum", " - ".join(album_figus) if album_figus else "Ninguna"],
-            ["❌ Faltantes", " - ".join(faltantes_figus) if faltantes_figus else "Ninguna"],
-            ["✅ Repetidas", " - ".join(repetidas_figus) if repetidas_figus else "Ninguna"],
-        ]
-
-        tabla = Table(data, colWidths=[120, 380])
-        tabla.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ]))
-
-        elementos.append(tabla)
-        elementos.append(Spacer(1, 12))
+        agregar_pais(data_extra["nombre"], codigo, figus)
 
     doc.build(elementos)
 
     with open(temp_pdf.name, "rb") as f:
         return f.read()
-
 
 
 def mostrar_estado_figu(figu, album, repetidas):
