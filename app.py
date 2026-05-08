@@ -143,8 +143,40 @@ def generar_csv_album_usuario(nombre_usuario, album, repetidas, faltantes):
     salida = io.StringIO()
     writer = csv.writer(salida)
 
+    album = set(album)
+    repetidas = set(repetidas)
+    faltantes = set(faltantes)
+
+    writer.writerow(["ÁLBUM DE FIGURITAS - MUNDIAL 2026"])
     writer.writerow(["Usuario", nombre_usuario])
     writer.writerow([])
+
+    writer.writerow(["RESUMEN POR PAÍS / ESPECIAL"])
+    writer.writerow(["País / especial", "En álbum", "Repetidas", "Faltantes"])
+
+    # Países normales
+    for codigo, nombre_pais in PAISES.items():
+        figus = [f"{codigo}{num}" for num in NUMEROS]
+        cant_album = len([f for f in figus if f in album])
+        cant_repetidas = len([f for f in figus if f in repetidas])
+        cant_faltantes = len([f for f in figus if f in faltantes])
+
+        # Título pedido: país - cantidad, en el mismo renglón.
+        titulo = f"{nombre_pais} - {cant_album} en álbum - {cant_repetidas} repetidas - {cant_faltantes} faltantes"
+        writer.writerow([titulo, cant_album, cant_repetidas, cant_faltantes])
+
+    # Especiales
+    for codigo, data in EXTRAS.items():
+        figus = [f"{codigo}{num}" for num in data["numeros"]]
+        cant_album = len([f for f in figus if f in album])
+        cant_repetidas = len([f for f in figus if f in repetidas])
+        cant_faltantes = len([f for f in figus if f in faltantes])
+
+        titulo = f"{data['nombre']} - {cant_album} en álbum - {cant_repetidas} repetidas - {cant_faltantes} faltantes"
+        writer.writerow([titulo, cant_album, cant_repetidas, cant_faltantes])
+
+    writer.writerow([])
+    writer.writerow(["DETALLE DE FIGURITAS"])
     writer.writerow(["Tipo", "Figurita"])
 
     for figu in sorted(album):
@@ -157,6 +189,7 @@ def generar_csv_album_usuario(nombre_usuario, album, repetidas, faltantes):
         writer.writerow(["Faltante", figu])
 
     return salida.getvalue().encode("utf-8-sig")
+
 
 def mostrar_estado_figu(figu, album, repetidas):
     if figu in album:
