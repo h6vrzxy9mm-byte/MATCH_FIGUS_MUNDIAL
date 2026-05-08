@@ -1,6 +1,8 @@
 
 import streamlit as st
 import json
+import io
+import csv
 from pathlib import Path
 import re
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
@@ -135,6 +137,26 @@ def mostrar_checkboxes_correlativos(figus, guardadas, key_prefix):
 
     return seleccionadas
 
+
+
+def generar_csv_album_usuario(nombre_usuario, album, repetidas, faltantes):
+    salida = io.StringIO()
+    writer = csv.writer(salida)
+
+    writer.writerow(["Usuario", nombre_usuario])
+    writer.writerow([])
+    writer.writerow(["Tipo", "Figurita"])
+
+    for figu in sorted(album):
+        writer.writerow(["En álbum", figu])
+
+    for figu in sorted(repetidas):
+        writer.writerow(["Repetida", figu])
+
+    for figu in sorted(faltantes):
+        writer.writerow(["Faltante", figu])
+
+    return salida.getvalue().encode("utf-8-sig")
 
 def mostrar_estado_figu(figu, album, repetidas):
     if figu in album:
@@ -662,6 +684,23 @@ with tab2:
         st.write(", ".join(faltantes) if faltantes else "¡Álbum completo!")
 
     st.caption("💾 Autoguardado activado: no hace falta tocar ningún botón para guardar.")
+
+    st.divider()
+    st.subheader("📥 Descargar mi álbum")
+
+    archivo_csv = generar_csv_album_usuario(
+        usuario.get("display_name", user),
+        album_final,
+        nuevas_repetidas,
+        faltantes
+    )
+
+    st.download_button(
+        label="📥 Descargar archivo de mi álbum",
+        data=archivo_csv,
+        file_name=f"album_{user}.csv",
+        mime="text/csv"
+    )
 
 
 
